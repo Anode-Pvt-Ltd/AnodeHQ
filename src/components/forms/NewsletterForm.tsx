@@ -4,7 +4,14 @@ import * as React from "react";
 import { ArrowRight, Check } from "lucide-react";
 import { Button } from "@/components/primitives/Button";
 import { Input } from "@/components/primitives/Field";
-import { newsletterSchema } from "@/lib/schemas";
+
+/**
+ * The newsletter form sits in the footer of every page, so it deliberately does
+ * NOT import the shared Zod schemas — doing so pulled 64 KB of validator into
+ * the site-wide bundle for one email field. The server still parses the same
+ * `newsletterSchema`, so nothing is trusted from here.
+ */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 export function NewsletterForm({ source = "footer" }: { source?: string }) {
   const [email, setEmail] = React.useState("");
@@ -17,10 +24,10 @@ export function NewsletterForm({ source = "footer" }: { source?: string }) {
     e.preventDefault();
     setMessage(null);
 
-    const parsed = newsletterSchema.safeParse({ email, source, website });
-    if (!parsed.success) {
+    const trimmed = email.trim();
+    if (!EMAIL_RE.test(trimmed)) {
       setState("error");
-      setMessage(parsed.error.issues[0]?.message ?? "Check the address and try again.");
+      setMessage("That does not look like a valid email address.");
       return;
     }
 
@@ -29,7 +36,7 @@ export function NewsletterForm({ source = "footer" }: { source?: string }) {
       const res = await fetch("/api/newsletter/subscribe", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(parsed.data),
+        body: JSON.stringify({ email: trimmed, source, website }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error?.message ?? "Something went wrong.");

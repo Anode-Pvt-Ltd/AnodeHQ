@@ -67,7 +67,10 @@ export function QuoteWizard({
   const [submitting, setSubmitting] = React.useState(false);
   const [formError, setFormError] = React.useState<string | null>(null);
   const [website, setWebsite] = React.useState("");
-  const startedAt = React.useRef(Date.now());
+  const startedAt = React.useRef(0);
+  // Stamped after mount rather than during render: the timing check only needs
+  // a client-side clock, and reading Date.now() in the render body is impure.
+  React.useEffect(() => { startedAt.current = Date.now(); }, []);
   const formToken = React.useRef<string>("");
   const headingRef = React.useRef<HTMLHeadingElement>(null);
 

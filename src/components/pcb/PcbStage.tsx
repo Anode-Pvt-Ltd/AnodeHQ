@@ -5,7 +5,7 @@ import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { getIcon } from "@/lib/icons";
 import { offsetAlongNormal, projectPoint, type Vec3 } from "@/lib/project3d";
-import type { Hotspot, PcbModel, PcbVariant } from "@/types/app";
+import type { PcbModel, PcbVariant } from "@/types/app";
 import { HotspotChip } from "./HotspotChip";
 import { ViewRail } from "./ViewRail";
 

@@ -44,7 +44,16 @@ export interface ResourceConfig {
   icon: string;
   hasStatus: boolean;
   hasSlug: boolean;
-  previewPath?: (row: Record<string, unknown>) => string;
+  /**
+   * Base path for "view on the site", e.g. "/projects" -> /projects/{slug}.
+   *
+   * MUST stay a plain string. This config is handed to client components
+   * (ResourceTable, EntityForm), and functions cannot cross the server/client
+   * boundary — React throws "Functions cannot be passed directly to Client
+   * Components". A prefix plus the row's slug carries the same information
+   * and serialises cleanly.
+   */
+  previewBase?: string;
   defaultSort: { key: string; dir: "asc" | "desc" };
   columns: ColumnConfig[];
   groups: { label: string; fields: string[] }[];
@@ -82,7 +91,7 @@ export const RESOURCES: ResourceConfig[] = [
     icon: "box",
     hasStatus: true,
     hasSlug: true,
-    previewPath: (r) => `/projects/${r.slug}`,
+    previewBase: "/projects",
     defaultSort: { key: "order_index", dir: "asc" },
     columns: [
       { key: "title", header: "Title", primary: true },
@@ -146,7 +155,7 @@ export const RESOURCES: ResourceConfig[] = [
     icon: "cpu",
     hasStatus: true,
     hasSlug: true,
-    previewPath: (r) => `/services/${r.slug}`,
+    previewBase: "/services",
     defaultSort: { key: "order_index", dir: "asc" },
     columns: [
       { key: "title", header: "Title", primary: true },
@@ -191,7 +200,7 @@ export const RESOURCES: ResourceConfig[] = [
     icon: "factory",
     hasStatus: true,
     hasSlug: true,
-    previewPath: (r) => `/industries/${r.slug}`,
+    previewBase: "/industries",
     defaultSort: { key: "order_index", dir: "asc" },
     columns: [
       { key: "name", header: "Name", primary: true },
@@ -233,7 +242,7 @@ export const RESOURCES: ResourceConfig[] = [
     icon: "file-text",
     hasStatus: true,
     hasSlug: true,
-    previewPath: (r) => `/insights/${r.slug}`,
+    previewBase: "/insights",
     defaultSort: { key: "published_at", dir: "desc" },
     columns: [
       { key: "title", header: "Title", primary: true },
@@ -530,5 +539,15 @@ export const RESOURCES: ResourceConfig[] = [
 ];
 
 export const resourceByKey = (key: string) => RESOURCES.find((r) => r.key === key);
+
+/** Builds the public URL for a row, or null when the type has no public page. */
+export function previewUrlFor(
+  config: Pick<ResourceConfig, "previewBase">,
+  row: Record<string, unknown> | null | undefined,
+): string | null {
+  const slug = row?.slug;
+  if (!config.previewBase || typeof slug !== "string" || !slug) return null;
+  return `${config.previewBase}/${slug}`;
+}
 
 export const RESOURCE_GROUPS = ["Inbox", "Content", "Proof", "Assets", "Site", "Admin"] as const;

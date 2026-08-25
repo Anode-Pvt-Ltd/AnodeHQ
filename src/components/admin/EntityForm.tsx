@@ -9,7 +9,7 @@ import { Button } from "@/components/primitives/Button";
 import { FieldRow, Input, Select, Textarea } from "@/components/primitives/Field";
 import { IconPicker } from "./IconPicker";
 import { saveContent } from "@/lib/mutations/content";
-import type { FieldConfig, ResourceConfig } from "@/lib/config/resources";
+import { previewUrlFor, type FieldConfig, type ResourceConfig } from "@/lib/config/resources";
 
 /**
  * The single edit view for every content type. Which fields appear, what they
@@ -116,9 +116,9 @@ export function EntityForm({
         <Button type="submit" icon={Save} iconPosition="start" loading={pending} disabled={!databaseReady}>
           {id ? "Save changes" : `Create ${config.label.singular.toLowerCase()}`}
         </Button>
-        {config.previewPath && initial.slug ? (
+        {previewUrlFor(config, initial) ? (
           <Button asChild variant="secondary" icon={Eye} iconPosition="start">
-            <a href={config.previewPath(initial)} target="_blank" rel="noreferrer">Preview</a>
+            <a href={previewUrlFor(config, initial)!} target="_blank" rel="noreferrer">Preview</a>
           </Button>
         ) : null}
         {dirty && <span className="text-body-sm text-warning">Unsaved changes</span>}

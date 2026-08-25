@@ -15,7 +15,10 @@ export function ContactForm({ responsePromise }: { responsePromise: string }) {
   const [website, setWebsite] = React.useState("");
   const [errors, setErrors] = React.useState<Errors>({});
   const [state, setState] = React.useState<"idle" | "sending" | "sent">("idle");
-  const startedAt = React.useRef(Date.now());
+  const startedAt = React.useRef(0);
+  // Stamped after mount rather than during render: the timing check only needs
+  // a client-side clock, and reading Date.now() in the render body is impure.
+  React.useEffect(() => { startedAt.current = Date.now(); }, []);
 
   const set = (k: keyof typeof values) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setValues((v) => ({ ...v, [k]: e.currentTarget.value }));

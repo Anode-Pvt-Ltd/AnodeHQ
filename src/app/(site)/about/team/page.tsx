@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { getSettings, getTeam } from "@/lib/queries";
-import { CtaBand, PageHero } from "@/components/sections";
+import { CtaBand } from "@/components/sections";
 import { Section } from "@/components/primitives/Section";
 import { Container } from "@/components/primitives/Container";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";

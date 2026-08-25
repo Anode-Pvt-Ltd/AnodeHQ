@@ -209,7 +209,7 @@ language sql stable security definer set search_path = '' as $$
     from public.posts b, query
    where b.status = 'published' and b.published_at <= now()
      and b.search_vector @@ query.tsq
-  order by rank desc
+  order by 5 desc   -- ordinal: UNION output names come from the first branch
   limit greatest(1, least(lim, 50));
 $$;
 
@@ -221,7 +221,7 @@ create or replace function public.move_quote_status(
 ) returns void language plpgsql security definer set search_path = '' as $$
 declare v_from public.quote_status;
 begin
-  if not public.has_role(auth.uid(), 'sales') then
+  if not public.is_sales() then
     raise exception 'insufficient privilege' using errcode = '42501';
   end if;
 

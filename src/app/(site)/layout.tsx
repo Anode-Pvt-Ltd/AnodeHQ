@@ -1,16 +1,15 @@
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { StickyQuoteBar } from "@/components/layout/StickyQuoteBar";
-import { getCertifications, getNavigation, getSettings } from "@/lib/queries";
+import { getCertifications, getResolvedNavigation, getSettings } from "@/lib/queries";
 import { absoluteUrl } from "@/lib/utils";
 
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
   const [settings, nav, certifications] = await Promise.all([
-    getSettings(), getNavigation(), getCertifications(),
+    getSettings(), getResolvedNavigation(), getCertifications(),
   ]);
 
   const org = {
-    "@context": "https://schema.org",
     "@type": "Organization",
     name: settings.contact.companyName,
     legalName: settings.contact.legalName,
@@ -36,7 +35,6 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
   };
 
   const site = {
-    "@context": "https://schema.org",
     "@type": "WebSite",
     name: "Anode",
     url: absoluteUrl("/"),
@@ -53,8 +51,17 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
       <main id="main">{children}</main>
       <SiteFooter settings={settings} items={nav.footer} certifications={certifications} />
       <StickyQuoteBar responsePromise={settings.contact.responsePromise} />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(org) }} />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(site) }} />
+      {/*
+        One @graph rather than two tags: fewer nodes, and crawlers read it from
+        the server-rendered HTML. type="application/ld+json" is data, not an
+        executable script, so React never needs to run it.
+      */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({ "@context": "https://schema.org", "@graph": [org, site] }),
+        }}
+      />
     </>
   );
 }

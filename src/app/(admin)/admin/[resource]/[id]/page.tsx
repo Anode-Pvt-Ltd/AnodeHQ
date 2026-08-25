@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, ExternalLink } from "lucide-react";
-import { resourceByKey } from "@/lib/config/resources";
+import { previewUrlFor, resourceByKey } from "@/lib/config/resources";
 import { createServiceClient } from "@/lib/supabase/service";
 import { requireRole } from "@/lib/auth";
 import { EntityForm } from "@/components/admin/EntityForm";
@@ -72,9 +72,9 @@ export default async function ResourceEditPage({
           All {config.label.plural.toLowerCase()}
         </Link>
 
-        {!isNew && config.previewPath && row?.slug ? (
+        {!isNew && previewUrlFor(config, row) ? (
           <Link
-            href={config.previewPath(row)}
+            href={previewUrlFor(config, row)!}
             target="_blank"
             className="inline-flex items-center gap-1.5 text-body-sm text-accent hover:underline"
           >

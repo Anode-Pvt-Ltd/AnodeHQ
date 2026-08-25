@@ -9,7 +9,7 @@ import { getIcon } from "@/lib/icons";
 import { LogoMark } from "@/components/layout/Logo";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { RESOURCES } from "@/lib/config/resources";
-import { ROLE_RANK } from "@/lib/auth";
+import { ROLE_RANK, hasRole } from "@/lib/roles";
 import type { AppRole } from "@/types/app";
 
 interface NavEntry {
@@ -62,7 +62,9 @@ export function AdminShell({
     (best, r) => (ROLE_RANK[r] > ROLE_RANK[best] ? r : best),
     "viewer",
   );
-  const can = (min: AppRole) => ROLE_RANK[topRole] >= ROLE_RANK[min];
+  // Via hasRole, so the sidebar matches the RLS policy: `sales` is a sibling
+  // of `editor`, not a rung below it.
+  const can = (min: AppRole) => hasRole(profile.roles, min);
 
   const entries: NavEntry[] = [
     ...FIXED,

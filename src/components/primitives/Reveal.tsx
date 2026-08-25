@@ -21,7 +21,10 @@ export function Reveal({
   React.useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { setShown(true); return; }
+    // Under reduced motion the CSS never hides the element in the first place
+    // (the opacity rule sits inside @media (prefers-reduced-motion: no-preference)),
+    // so there is nothing to reveal and no observer to attach.
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const io = new IntersectionObserver(
       ([entry]) => { if (entry?.isIntersecting) { setShown(true); io.disconnect(); } },
       { rootMargin: "0px 0px -12% 0px", threshold: 0.05 },

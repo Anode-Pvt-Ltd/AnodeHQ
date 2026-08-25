@@ -2,6 +2,13 @@ import { z } from "zod";
 
 /** Shared by the client form and the route handler — they cannot drift (§2). */
 
+/**
+ * Honeypot. Deliberately permissive so a filled value PARSES and reaches the
+ * gate in lib/api.ts, which answers with a silent 202. Rejecting it here would
+ * return a 400 naming the field — telling a bot exactly where the trap is.
+ */
+const honeypot = z.string().max(200).optional();
+
 const email = z
   .string()
   .trim()
@@ -12,7 +19,7 @@ const email = z
 export const newsletterSchema = z.object({
   email,
   source: z.string().max(120).optional(),
-  website: z.string().max(0).optional(), // honeypot
+  website: honeypot,
 });
 export type NewsletterInput = z.infer<typeof newsletterSchema>;
 
@@ -27,7 +34,7 @@ export const contactSchema = z.object({
     .trim()
     .min(10, "Please give us a little more detail — at least 10 characters")
     .max(5000, "That is longer than we can accept. Please keep it under 5000 characters."),
-  website: z.string().max(0).optional(),
+  website: honeypot,
   startedAt: z.number().optional(),
   turnstileToken: z.string().optional(),
 });
@@ -117,7 +124,7 @@ export const quoteSubmitSchema = quoteStep1
   .extend(quoteStep3.shape)
   .extend(quoteStep4.shape)
   .extend({
-    website: z.string().max(0).optional(),
+    website: honeypot,
     startedAt: z.number().optional(),
     turnstileToken: z.string().optional(),
     source: z.record(z.string(), z.string()).optional(),

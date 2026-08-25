@@ -177,14 +177,14 @@ begin
     execute format('drop policy if exists "sales read" on public.%I', t);
     execute format($f$
       create policy "sales read" on public.%I
-        for select to authenticated using (public.is_staff('sales'))
+        for select to authenticated using (public.is_sales())
     $f$, t);
 
     execute format('drop policy if exists "sales update" on public.%I', t);
     execute format($f$
       create policy "sales update" on public.%I
         for update to authenticated
-        using (public.is_staff('sales')) with check (public.is_staff('sales'))
+        using (public.is_sales()) with check (public.is_sales())
     $f$, t);
 
     execute format('drop policy if exists "owners delete" on public.%I', t);

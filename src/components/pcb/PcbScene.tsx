@@ -3,7 +3,7 @@
 import * as React from "react";
 import * as THREE from "three";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { OrbitControls, PerformanceMonitor, Environment } from "@react-three/drei";
+import { OrbitControls, PerformanceMonitor } from "@react-three/drei";
 import { heroBoard, type BoardDefinition, type BoardPart } from "@/content/pcb";
 import type { Hotspot, PcbModel, PcbVariant } from "@/types/app";
 import type { ProjectionSink } from "./PcbStage";
@@ -547,10 +547,17 @@ export default function PcbScene({
         onIncline={() => setDpr(Math.min(2, window.devicePixelRatio))}
       />
 
-      <ambientLight intensity={0.55} />
-      <directionalLight position={[4, 6, 3]} intensity={2.1} />
-      <directionalLight position={[-4, 3, -2]} intensity={0.5} color="#8fd4e6" />
-      <Environment preset="city" environmentIntensity={0.35} />
+      {/*
+        Lighting is entirely local. drei's <Environment preset> fetches an HDR
+        from raw.githack.com, which the CSP blocks — correctly, since the whole
+        board is meant to be self-contained. A hemisphere fill plus a rim light
+        replaces the image-based lighting without a network request.
+      */}
+      <ambientLight intensity={0.5} />
+      <hemisphereLight args={["#cfeaf2", "#0a2129", 0.85]} />
+      <directionalLight position={[4, 6, 3]} intensity={2.2} />
+      <directionalLight position={[-4, 3, -2]} intensity={0.6} color="#8fd4e6" />
+      <directionalLight position={[0, 2, -5]} intensity={0.35} color="#ffe9c2" />
 
       <React.Suspense fallback={null}>
         <Board

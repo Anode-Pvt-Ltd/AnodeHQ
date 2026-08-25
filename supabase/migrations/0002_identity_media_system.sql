@@ -91,6 +91,14 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function app.handle_new_user();
 
+-- The trigger only fires on INSERT, so any account that already existed when
+-- the schema was applied would never get a profile — and would then be locked
+-- out of /admin. Backfill them once, still with no role attached.
+insert into public.profiles (id, full_name)
+select u.id, coalesce(u.raw_user_meta_data->>'full_name', split_part(u.email, '@', 1))
+from auth.users u
+on conflict (id) do nothing;
+
 -- -------------------------------------------------------------
 -- Audit log — append only
 -- -------------------------------------------------------------
@@ -167,3 +175,52 @@ create table if not exists public.redirects (
   hit_count   int not null default 0,
   created_at  timestamptz not null default now()
 );
+
+-- -------------------------------------------------------------
+-- The only privilege test. SECURITY DEFINER so that policies on
+-- user_roles do not recurse into themselves.
+-- -------------------------------------------------------------
+create or replace function public.has_role(uid uuid, required public.app_role)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select exists (
+    select 1
+    from public.user_roles r
+    join public.profiles  p on p.id = r.user_id
+    where r.user_id = uid
+      and p.is_active
+      and r.role >= required
+  );
+$$;
+
+revoke execute on function public.has_role(uuid, public.app_role) from anon;
+grant  execute on function public.has_role(uuid, public.app_role) to authenticated;
+
+-- Convenience wrapper for policies
+create or replace function public.is_staff(required public.app_role default 'viewer')
+returns boolean language sql stable security definer set search_path = '' as $$
+  select public.has_role(auth.uid(), required);
+$$;
+
+-- -------------------------------------------------------------
+-- Commercial access is NOT a rank comparison.
+--
+-- app_role is ordered viewer < sales < editor < admin < owner, so
+-- `role >= 'sales'` would also match editor — and an editor must not
+-- see quote requests or contact messages. sales and editor are sibling
+-- capabilities: one handles commercial records, the other content.
+-- Only admin and owner hold both.
+-- -------------------------------------------------------------
+create or replace function public.is_sales()
+returns boolean language sql stable security definer set search_path = '' as $$
+  select exists (
+    select 1
+    from public.user_roles r
+    join public.profiles  p on p.id = r.user_id
+    where r.user_id = auth.uid()
+      and p.is_active
+      and (r.role = 'sales' or r.role >= 'admin')
+  );
+$$;
+
+revoke execute on function public.is_sales() from anon;
+grant  execute on function public.is_sales() to authenticated;

@@ -2,7 +2,10 @@ import "server-only";
 import { unstable_cache } from "next/cache";
 import { TAGS } from "@/lib/cache";
 import { isSupabaseConfigured } from "@/lib/env";
-import { createClient } from "@/lib/supabase/server";
+// Public reads use the session-less client: these functions run inside
+// unstable_cache(), which cannot touch cookies(), and a cached public page
+// must not vary by visitor anyway.
+import { createPublicClient } from "@/lib/supabase/public";
 import { QueryError } from "@/lib/errors";
 import * as seed from "@/content";
 import type {
@@ -21,6 +24,36 @@ import type {
 
 const isLive = () => isSupabaseConfigured;
 
+/**
+ * PostgREST / Postgres codes that mean "the schema has not been applied yet"
+ * rather than "this query is wrong":
+ *   PGRST205 unknown table · PGRST202 unknown function
+ *   42P01 undefined_table  · 42883 undefined_function
+ *
+ * In that one case we fall back to the seed dataset and warn loudly, so a
+ * half-configured project still builds instead of failing on every page. Any
+ * other error throws — a genuine query fault must never be masked.
+ */
+const SCHEMA_MISSING = new Set(["PGRST205", "PGRST202", "42P01", "42883"]);
+
+let warned = false;
+function schemaMissing(error: { code?: string } | null | undefined): boolean {
+  if (!error?.code || !SCHEMA_MISSING.has(error.code)) return false;
+  if (!warned) {
+    warned = true;
+    console.warn(
+      [
+        "",
+        "[anode] Supabase is configured but the schema has not been applied.",
+        "        Serving seed content instead.",
+        "        Fix: run supabase/apply-all.sql against the project, then rebuild.",
+        "",
+      ].join("\n"),
+    );
+  }
+  return true;
+}
+
 const toSummary = (s: Service): ServiceSummary => ({
   slug: s.slug, title: s.title, summary: s.summary, icon: s.icon,
 });
@@ -33,38 +66,83 @@ const publishedOnly = <T extends { status: string; publishedAt: string | null }>
 export const getSettings = unstable_cache(
   async (): Promise<SiteSettings> => {
     if (!isLive()) return seed.settings;
-    const sb = await createClient();
+    const sb = createPublicClient();
     if (!sb) return seed.settings;
     const { data, error } = await sb.from("site_settings").select("key, value, group_name");
-    if (error) throw new QueryError("site_settings", error);
+    if (error) { if (schemaMissing(error)) return seed.settings; throw new QueryError("site_settings", error); }
     if (!data?.length) return seed.settings;
-    const merged: Record<string, unknown> = {};
-    for (const row of data) {
-      const [group, ...rest] = String(row.key).split(".");
-      if (!group) continue;
-      if (rest.length === 0) merged[group] = row.value;
-      else {
-        const g = (merged[group] ??= {}) as Record<string, unknown>;
-        g[rest.join(".")] = row.value;
-      }
-    }
-    return { ...seed.settings, ...(merged as Partial<SiteSettings>) } as SiteSettings;
+    return mapSettings(data as { key: string; value: unknown }[]);
   },
   ["settings"],
   { tags: [TAGS.settings], revalidate: 3600 },
 );
 
+/**
+ * site_settings is a key/value table using snake_case keys; SiteSettings is a
+ * camelCase domain type. Map every field explicitly rather than spreading the
+ * rows — a blind spread replaces whole groups with the wrong shape and the
+ * mismatch only surfaces at render, as `undefined.map is not a function`.
+ *
+ * Any key absent from the database falls back to the seed value, so a
+ * partially-populated table still renders a complete site.
+ */
+function mapSettings(rows: { key: string; value: unknown }[]): SiteSettings {
+  const v = new Map(rows.map((r) => [r.key, r.value]));
+  const pick = <T,>(key: string, fallback: T): T => (v.has(key) ? (v.get(key) as T) : fallback);
+  const s = seed.settings;
+
+  return {
+    hero: {
+      eyebrow: pick("hero.eyebrow", s.hero.eyebrow),
+      headlineLines: pick("hero.headline_lines", s.hero.headlineLines),
+      accentWord: pick("hero.accent_word", s.hero.accentWord),
+      subcopy: pick("hero.subcopy", s.hero.subcopy),
+      ctaPrimary: pick("hero.cta_primary", s.hero.ctaPrimary),
+      ctaSecondary: pick("hero.cta_secondary", s.hero.ctaSecondary),
+      proofCaption: pick("hero.proof_caption", s.hero.proofCaption),
+    },
+    copy: {
+      processHeading: pick("copy.process_heading", s.copy.processHeading),
+      sectionHeadings: pick("copy.section_headings", s.copy.sectionHeadings),
+      ctaBand: pick("copy.cta_band", s.copy.ctaBand),
+      differentiators: pick("copy.differentiators", s.copy.differentiators),
+      comparison: pick("copy.comparison", s.copy.comparison),
+    },
+    contact: {
+      companyName: pick("contact.company_name", s.contact.companyName),
+      legalName: pick("contact.legal_name", s.contact.legalName),
+      email: pick("contact.email", s.contact.email),
+      salesEmail: pick("contact.sales_email", s.contact.salesEmail),
+      phone: pick("contact.phone", s.contact.phone),
+      addressLines: pick("contact.address_lines", s.contact.addressLines),
+      hours: pick("contact.hours", s.contact.hours),
+      responsePromise: pick("contact.response_promise", s.contact.responsePromise),
+      geo: pick("contact.geo", s.contact.geo),
+    },
+    social: pick("social.links", s.social),
+    seo: {
+      titleTemplate: pick("seo.title_template", s.seo.titleTemplate),
+      defaultTitle: pick("seo.default_title", s.seo.defaultTitle),
+      description: pick("seo.description", s.seo.description),
+      timezone: pick("seo.timezone", s.seo.timezone),
+    },
+    // The features group is staff-only, so the anon key never sees it —
+    // fall back to the seed flags rather than disabling every feature.
+    features: pick("features.flags", s.features),
+  };
+}
+
 export const getNavigation = unstable_cache(
   async (): Promise<{ header: NavItem[]; footer: NavItem[] }> => {
     if (!isLive()) return { header: seed.navigation, footer: seed.footerNavigation };
-    const sb = await createClient();
+    const sb = createPublicClient();
     if (!sb) return { header: seed.navigation, footer: seed.footerNavigation };
     const { data, error } = await sb
       .from("navigation_items")
       .select("id, parent_id, label, href, description, icon, location, column_group, order_index, is_external, is_active")
       .eq("is_active", true)
       .order("order_index");
-    if (error) throw new QueryError("navigation_items", error);
+    if (error) { if (schemaMissing(error)) return { header: seed.navigation, footer: seed.footerNavigation }; throw new QueryError("navigation_items", error); }
     if (!data?.length) return { header: seed.navigation, footer: seed.footerNavigation };
 
     const map = new Map<string, NavItem>();
@@ -92,12 +170,77 @@ export const getNavigation = unstable_cache(
   { tags: [TAGS.nav], revalidate: 3600 },
 );
 
+/**
+ * Navigation that cannot go stale.
+ *
+ * `navigation_items` stores the menu structure, but its child rows for Services
+ * and Industries duplicated content that lives elsewhere — so deleting an
+ * industry left a menu entry pointing at a 404, and adding one never appeared.
+ * Those two branches are now DERIVED from the published content on every read;
+ * the stored rows still supply structure, labels and ordering for everything
+ * else.
+ *
+ * Any remaining stored link is checked against the content that backs it, so a
+ * deleted service or article can never survive in a menu either.
+ */
+export async function getResolvedNavigation(): Promise<{ header: NavItem[]; footer: NavItem[] }> {
+  const [nav, services, industries] = await Promise.all([
+    getNavigation(), getServices(), getIndustries(),
+  ]);
+
+  const serviceChildren: NavItem[] = services.map((s, i) => ({
+    id: `svc-${s.slug}`,
+    label: s.title,
+    href: `/services/${s.slug}`,
+    description: s.summary,
+    icon: s.icon,
+    location: "header",
+    columnGroup: null,
+    children: [],
+    isExternal: false,
+    orderIndex: i + 1,
+  }));
+
+  const industryChildren: NavItem[] = industries.map((n, i) => ({
+    id: `ind-${n.slug}`,
+    label: n.name,
+    href: `/industries/${n.slug}`,
+    description: null,
+    icon: n.icon,
+    location: "header",
+    columnGroup: null,
+    children: [],
+    isExternal: false,
+    orderIndex: i + 1,
+  }));
+
+  // Every path the menus are allowed to point at, for the leaf check below.
+  const live = new Set<string>([
+    ...services.map((s) => `/services/${s.slug}`),
+    ...industries.map((n) => `/industries/${n.slug}`),
+  ]);
+  const isDeadContentLink = (href: string) =>
+    (href.startsWith("/services/") || href.startsWith("/industries/") || href.startsWith("/insights/")) &&
+    !live.has(href);
+
+  const resolve = (items: NavItem[]): NavItem[] =>
+    items
+      .filter((item) => !isDeadContentLink(item.href))
+      .map((item) => {
+        if (item.href === "/services") return { ...item, children: serviceChildren };
+        if (item.href === "/industries") return { ...item, children: industryChildren };
+        return { ...item, children: resolve(item.children) };
+      });
+
+  return { header: resolve(nav.header), footer: resolve(nav.footer) };
+}
+
 /* ------------------------------------------------------------- services */
 
 export const getServices = unstable_cache(
   async (): Promise<Service[]> => {
     if (!isLive()) return publishedOnly(seed.services).sort((a, b) => a.orderIndex - b.orderIndex);
-    const sb = await createClient();
+    const sb = createPublicClient();
     if (!sb) return publishedOnly(seed.services);
     const { data, error } = await sb
       .from("services")
@@ -105,7 +248,7 @@ export const getServices = unstable_cache(
       .eq("status", "published")
       .lte("published_at", new Date().toISOString())
       .order("order_index");
-    if (error) throw new QueryError("services.list", error);
+    if (error) { if (schemaMissing(error)) return publishedOnly(seed.services); throw new QueryError("services.list", error); }
     return (data ?? []).map(mapService);
   },
   ["services:list"],
@@ -139,10 +282,10 @@ function mapService(r: any): Service {
 export const getIndustries = unstable_cache(
   async (): Promise<Industry[]> => {
     if (!isLive()) return publishedOnly(seed.industries).sort((a, b) => a.orderIndex - b.orderIndex);
-    const sb = await createClient();
+    const sb = createPublicClient();
     if (!sb) return publishedOnly(seed.industries);
     const { data, error } = await sb.rpc("industries_with_counts");
-    if (error) throw new QueryError("industries_with_counts", error);
+    if (error) { if (schemaMissing(error)) return publishedOnly(seed.industries); throw new QueryError("industries_with_counts", error); }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (data ?? []).map((r: any) => {
       const fb = seed.industryBySlug(r.slug);
@@ -175,7 +318,7 @@ export async function getIndustryBySlug(slug: string): Promise<Industry | null> 
 export const getProjects = unstable_cache(
   async (): Promise<Project[]> => {
     if (!isLive()) return publishedOnly(seed.projects).sort((a, b) => a.orderIndex - b.orderIndex);
-    const sb = await createClient();
+    const sb = createPublicClient();
     if (!sb) return publishedOnly(seed.projects);
     const { data, error } = await sb
       .from("projects")
@@ -183,7 +326,7 @@ export const getProjects = unstable_cache(
       .eq("status", "published")
       .lte("published_at", new Date().toISOString())
       .order("order_index");
-    if (error) throw new QueryError("projects.list", error);
+    if (error) { if (schemaMissing(error)) return publishedOnly(seed.projects); throw new QueryError("projects.list", error); }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (data ?? []).map((r: any) => ({ ...(seed.projectBySlug(r.slug) ?? ({} as Project)), ...r })) as Project[];
   },
@@ -243,7 +386,7 @@ export const getPosts = unstable_cache(
         .filter((p) => p.status === "published" && new Date(p.publishedAt) <= new Date())
         .sort((a, b) => +new Date(b.publishedAt) - +new Date(a.publishedAt));
     }
-    const sb = await createClient();
+    const sb = createPublicClient();
     if (!sb) return seed.posts;
     const { data, error } = await sb
       .from("posts")
@@ -251,7 +394,7 @@ export const getPosts = unstable_cache(
       .eq("status", "published")
       .lte("published_at", new Date().toISOString())
       .order("published_at", { ascending: false });
-    if (error) throw new QueryError("posts.list", error);
+    if (error) { if (schemaMissing(error)) return seed.posts.filter((x) => x.status === "published"); throw new QueryError("posts.list", error); }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (data ?? []).map((r: any) => ({ ...(seed.postBySlug(r.slug) ?? ({} as Post)), ...r })) as Post[];
   },

@@ -69,30 +69,9 @@ begin
   return new;
 end $$;
 
--- -------------------------------------------------------------
--- The only privilege test. SECURITY DEFINER so that policies on
--- user_roles do not recurse into themselves.
--- -------------------------------------------------------------
-create or replace function public.has_role(uid uuid, required public.app_role)
-returns boolean language sql stable security definer set search_path = '' as $$
-  select exists (
-    select 1
-    from public.user_roles r
-    join public.profiles  p on p.id = r.user_id
-    where r.user_id = uid
-      and p.is_active
-      and r.role >= required
-  );
-$$;
-
-revoke execute on function public.has_role(uuid, public.app_role) from anon;
-grant  execute on function public.has_role(uuid, public.app_role) to authenticated;
-
--- Convenience wrapper for policies
-create or replace function public.is_staff(required public.app_role default 'viewer')
-returns boolean language sql stable security definer set search_path = '' as $$
-  select public.has_role(auth.uid(), required);
-$$;
+-- NOTE: public.has_role() / is_staff() are defined in 0002, immediately
+-- after profiles and user_roles exist. Postgres validates SQL function
+-- bodies at CREATE time, so they cannot be declared before their tables.
 
 -- -------------------------------------------------------------
 -- Sliding-window rate limiter (spec §6.3)

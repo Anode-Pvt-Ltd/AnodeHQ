@@ -7,7 +7,7 @@ import { Container } from "@/components/primitives/Container";
 import { Button } from "@/components/primitives/Button";
 import { Reveal } from "@/components/primitives/Reveal";
 import { Img } from "@/components/media/Img";
-import { ServiceCard, ProjectCard, IndustryCard, PostCard } from "@/components/content/Cards";
+import { ServiceCard, IndustryCard, PostCard } from "@/components/content/Cards";
 import { FeaturedWorkRail } from "@/components/content/FeaturedWorkRail";
 import type {
   Client, IndustrySummary, PostSummary, ProcessStage, ProjectCardData, ServiceSummary,

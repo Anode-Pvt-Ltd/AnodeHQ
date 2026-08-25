@@ -2,13 +2,13 @@ import "server-only";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import { AuthError } from "@/lib/errors";
+import { AuthError, QueryError } from "@/lib/errors";
 import { isSupabaseConfigured } from "@/lib/env";
 import type { AppRole } from "@/types/app";
+import { hasRole } from "@/lib/roles";
 
-export const ROLE_RANK: Record<AppRole, number> = {
-  viewer: 0, sales: 1, editor: 2, admin: 3, owner: 4,
-};
+export { ROLE_RANK, hasRole } from "@/lib/roles";
+
 
 export interface AdminProfile {
   id: string;
@@ -19,17 +19,31 @@ export interface AdminProfile {
   aal: string | null;
 }
 
-export function hasRole(roles: AppRole[], required: AppRole): boolean {
-  return roles.some((r) => ROLE_RANK[r] >= ROLE_RANK[required]);
-}
-
 /**
  * The authorisation gate. Uses getUser(), which verifies against the auth
  * server — getSession() only decodes the cookie and would accept a forged or
  * revoked token (spec §8.3).
  */
+/**
+ * True when the identity tables exist. A configured project whose migrations
+ * have not been applied is a normal setup state, not an error — the admin
+ * shows instructions rather than a 500.
+ */
+export const isSchemaApplied = cache(async (): Promise<boolean> => {
+  if (!isSupabaseConfigured) return false;
+  const admin = createServiceClient();
+  if (!admin) return false;
+  const { error } = await admin.from("profiles").select("id").limit(1);
+  if (!error) return true;
+  const code = (error as { code?: string }).code;
+  if (code && ["PGRST205", "PGRST202", "42P01", "42883"].includes(code)) return false;
+  // Anything else is a real fault; surface it rather than hiding it.
+  throw new QueryError("profiles.probe", error);
+});
+
 export const getAdminProfile = cache(async (): Promise<AdminProfile | null> => {
   if (!isSupabaseConfigured) return null;
+  if (!(await isSchemaApplied())) return null;
 
   const sb = await createClient();
   if (!sb) return null;

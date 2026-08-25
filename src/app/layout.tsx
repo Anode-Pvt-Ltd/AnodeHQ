@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import { Outfit, Public_Sans, IBM_Plex_Mono } from "next/font/google";
-import { Toaster } from "sonner";
 import { themeScript } from "@/components/layout/ThemeToggle";
 import { getSettings } from "@/lib/queries";
 import { absoluteUrl } from "@/lib/utils";
@@ -50,11 +49,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en-GB" suppressHydrationWarning className={`${display.variable} ${body.variable} ${mono.variable}`}>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        {/*
+          Runs before first paint so the stamped theme never flashes. It has to
+          be a raw inline script in <head>: next/script defers, which would
+          reintroduce the flash. React warns that scripts do not execute on
+          client transitions — true, and irrelevant, because by then the
+          data-theme attribute is already set.
+        */}
+        <script
+          dangerouslySetInnerHTML={{ __html: themeScript }}
+          suppressHydrationWarning
+        />
       </head>
       <body>
         {children}
-        <Toaster position="bottom-right" toastOptions={{ className: "font-sans" }} />
       </body>
     </html>
   );

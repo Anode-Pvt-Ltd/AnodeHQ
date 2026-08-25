@@ -9,7 +9,7 @@ import { cn, formatDateShort } from "@/lib/utils";
 import { Badge } from "@/components/primitives/Badge";
 import { Input } from "@/components/primitives/Field";
 import { deleteContent, setStatus } from "@/lib/mutations/content";
-import type { ResourceConfig } from "@/lib/config/resources";
+import { previewUrlFor, type ResourceConfig } from "@/lib/config/resources";
 
 const STATUS_TONE = {
   published: "success",
@@ -160,9 +160,9 @@ export function ResourceTable({
                           Publish
                         </button>
                       )}
-                      {config.previewPath && row.slug ? (
+                      {previewUrlFor(config, row) ? (
                         <Link
-                          href={config.previewPath(row)}
+                          href={previewUrlFor(config, row)!}
                           target="_blank"
                           aria-label={`Preview ${label}`}
                           className="rounded-md p-1.5 text-fg-subtle hover:bg-bg-subtle hover:text-fg"

@@ -87,8 +87,8 @@ function purge(resourceKey: string, slug?: unknown) {
   const map: Record<string, string[]> = {
     projects: ["projects", "industries"],
     services: ["services", "projects", "nav"],
-    industries: ["industries", "projects"],
-    posts: ["posts", "topics"],
+    industries: ["industries", "projects", "nav"],
+    posts: ["posts", "topics", "nav"],
     process_stages: ["process"],
     testimonials: ["testimonials", "projects"],
     clients: ["clients"],
